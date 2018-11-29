@@ -1,3 +1,4 @@
 retinanet_snapshot/resnet50_csv_12.h5 filter=lfs diff=lfs merge=lfs -text
 *.h5 filter=lfs diff=lfs merge=lfs -text
 retinanet_snapshot/resnet50_csv_10.h5 filter=lfs diff=lfs merge=lfs -text
+fullsize_train_annotations.csv filter=lfs diff=lfs merge=lfs -text
