@@ -1,0 +1,102 @@
+diff --git a/keras_retinanet/bin/evaluate.py b/keras_retinanet/bin/evaluate.py
+index d96afb5..24f1049 100755
+--- a/keras_retinanet/bin/evaluate.py
++++ b/keras_retinanet/bin/evaluate.py
+@@ -105,6 +105,7 @@ def parse_args(args):
+     parser.add_argument('--iou-threshold',    help='IoU Threshold to count for a positive detection (defaults to 0.5).', default=0.5, type=float)
+     parser.add_argument('--max-detections',   help='Max Detections per image (defaults to 100).', default=100, type=int)
+     parser.add_argument('--save-path',        help='Path for saving images with detections (doesn\'t work for COCO).')
++    parser.add_argument('--save-data-path',   help='Path for saving detections (doesn\'t work for COCO).')
+     parser.add_argument('--image-min-side',   help='Rescale the image so the smallest side is min_side.', type=int, default=800)
+     parser.add_argument('--image-max-side',   help='Rescale the image if the largest side is larger than max_side.', type=int, default=1333)
+     parser.add_argument('--config',           help='Path to a configuration parameters .ini file (only used with --convert-model).')
+@@ -164,7 +165,8 @@ def main(args=None):
+             iou_threshold=args.iou_threshold,
+             score_threshold=args.score_threshold,
+             max_detections=args.max_detections,
+-            save_path=args.save_path
++            save_path=args.save_path,
++            save_data_path=args.save_data_path
+         )
+ 
+         # print evaluation
+diff --git a/keras_retinanet/preprocessing/csv_generator.py b/keras_retinanet/preprocessing/csv_generator.py
+index 442d226..5e5ca63 100644
+--- a/keras_retinanet/preprocessing/csv_generator.py
++++ b/keras_retinanet/preprocessing/csv_generator.py
+@@ -206,6 +206,9 @@ class CSVGenerator(Generator):
+         """
+         return read_image_bgr(self.image_path(image_index))
+ 
++    def load_image_and_path(self, image_index):
++        return self.load_image(image_index), self.image_path(image_index)
++
+     def load_annotations(self, image_index):
+         """ Load annotations for an image_index.
+         """
+diff --git a/keras_retinanet/utils/eval.py b/keras_retinanet/utils/eval.py
+index d3cc067..c57edd8 100644
+--- a/keras_retinanet/utils/eval.py
++++ b/keras_retinanet/utils/eval.py
+@@ -55,7 +55,7 @@ def _compute_ap(recall, precision):
+     return ap
+ 
+ 
+-def _get_detections(generator, model, score_threshold=0.05, max_detections=100, save_path=None):
++def _get_detections(generator, model, score_threshold=0.05, max_detections=100, save_path=None, save_data_path=None):
+     """ Get the detections from the model using the generator.
+ 
+     The result is a list of lists such that the size is:
+@@ -67,13 +67,15 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100,
+         score_threshold : The score confidence threshold to use.
+         max_detections  : The maximum number of detections to use per image.
+         save_path       : The path to save the images with visualized detections to.
++        save_data_path  : The path to save the result vector
++
+     # Returns
+         A list of lists containing the detections for each image in the generator.
+     """
+     all_detections = [[None for i in range(generator.num_classes()) if generator.has_label(i)] for j in range(generator.size())]
+ 
+     for i in progressbar.progressbar(range(generator.size()), prefix='Running network: '):
+-        raw_image    = generator.load_image(i)
++        raw_image, raw_image_path = generator.load_image_and_path(i)
+         image        = generator.preprocess_image(raw_image.copy())
+         image, scale = generator.resize_image(image)
+ 
+@@ -107,6 +109,10 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100,
+ 
+             cv2.imwrite(os.path.join(save_path, '{}.png'.format(i)), raw_image)
+ 
++        if save_data_path is not None:
++            fid = os.path.basename(raw_image_path).split('.')[0]
++            np.save(os.path.join(save_data_path, '{}.{}'.format(fid, 'p')), image_detections)
++
+         # copy detections to all_detections
+         for label in range(generator.num_classes()):
+             if not generator.has_label(label):
+@@ -150,7 +156,8 @@ def evaluate(
+     iou_threshold=0.5,
+     score_threshold=0.05,
+     max_detections=100,
+-    save_path=None
++    save_path=None,
++    save_data_path=None
+ ):
+     """ Evaluate a given dataset using a given model.
+ 
+@@ -161,11 +168,13 @@ def evaluate(
+         score_threshold : The score confidence threshold to use for detections.
+         max_detections  : The maximum number of detections to use per image.
+         save_path       : The path to save images with visualized detections to.
++        save_data_path  : Save the numpy output of inference.
+     # Returns
+         A dict mapping class names to mAP scores.
+     """
+     # gather all detections and annotations
+-    all_detections     = _get_detections(generator, model, score_threshold=score_threshold, max_detections=max_detections, save_path=save_path)
++    all_detections     = _get_detections(generator, model, score_threshold=score_threshold, max_detections=max_detections,
++                                         save_path=save_path, save_data_path=save_data_path)
+     all_annotations    = _get_annotations(generator)
+     average_precisions = {}
+ 
